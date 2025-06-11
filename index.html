@@ -2,20 +2,19 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>Carton Picker with Firebase Integration</title>
+  <title>Carton Picker with Firebase Live Update</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <!-- Firebase SDKs -->
   <script type="module">
-    // Import the functions you need from the SDKs you need
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
     import { getAnalytics } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-analytics.js";
-    import { getDatabase, ref, set, get, child, update } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
+    import { getDatabase, ref, onValue, set, update } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
-    // Your web app's Firebase configuration
     const firebaseConfig = {
       apiKey: "AIzaSyC7bdFbIo4KPxrkPW9gpn7LbTrx9fI4WaQ",
       authDomain: "ob-pick-list.firebaseapp.com",
+      databaseURL: "https://ob-pick-list-default-rtdb.firebaseio.com",
       projectId: "ob-pick-list",
       storageBucket: "ob-pick-list.firebasestorage.app",
       messagingSenderId: "134326354077",
@@ -28,11 +27,10 @@
     const analytics = getAnalytics(app);
     const db = getDatabase(app);
 
-    // Expose Firebase database and functions globally for use in main script
+    // Expose Firebase database and functions globally
     window.firebaseDB = db;
     window.firebaseRef = ref;
-    window.firebaseGet = get;
-    window.firebaseChild = child;
+    window.firebaseOnValue = onValue;
     window.firebaseSet = set;
     window.firebaseUpdate = update;
   </script>
@@ -157,52 +155,29 @@
         <tbody id="dataTableBody" class="text-gray-900"></tbody>
       </table>
     </div>
-  </div>
 
-  <!-- User Management Modal -->
-  <div id="userMgmtModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50 p-4">
-    <div class="bg-white rounded shadow-lg max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
-      <div class="flex justify-between items-center mb-4">
-        <h2 class="text-lg font-bold">User Management</h2>
-        <button id="closeUserMgmtBtn" class="text-gray-600 hover:text-gray-900 text-3xl font-bold leading-none">&times;</button>
-      </div>
-      <form id="userForm" class="space-y-4">
-        <input type="hidden" id="editUserIndex" />
-        <div>
-          <label for="userIdInput" class="block font-semibold mb-1">User ID</label>
-          <input id="userIdInput" type="text" class="w-full border border-gray-400 rounded px-3 py-2" required />
-        </div>
-        <div>
-          <label for="userPasswordInput" class="block font-semibold mb-1">Password</label>
-          <input id="userPasswordInput" type="password" class="w-full border border-gray-400 rounded px-3 py-2" required />
-        </div>
-        <div>
-          <label class="inline-flex items-center">
-            <input id="userIsMasterInput" type="checkbox" class="form-checkbox" disabled />
-            <span class="ml-2">Master User (fixed)</span>
-          </label>
-        </div>
-        <div class="flex space-x-2">
-          <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Save</button>
-          <button type="button" id="userFormCancelBtn" class="bg-gray-400 text-black px-4 py-2 rounded hover:bg-gray-500">Cancel</button>
-        </div>
-      </form>
-      <hr class="my-4" />
-      <h3 class="font-bold mb-2">Users</h3>
-      <table class="w-full text-sm border border-gray-300 rounded">
-        <thead>
-          <tr class="bg-gray-200">
-            <th class="border border-gray-300 px-2 py-1 text-left">User ID</th>
-            <th class="border border-gray-300 px-2 py-1 text-left">Master</th>
-            <th class="border border-gray-300 px-2 py-1 text-left">Actions</th>
-          </tr>
-        </thead>
-        <tbody id="userTableBody"></tbody>
-      </table>
-    </div>
-  </div>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-analytics.js";
+    import { getDatabase, ref, onValue, set, update } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
-  <script>
+    // Firebase config
+    const firebaseConfig = {
+      apiKey: "AIzaSyC7bdFbIo4KPxrkPW9gpn7LbTrq9fI4WaQ",
+      authDomain: "ob-pick-list.firebaseapp.com",
+      databaseURL: "https://ob-pick-list-default-rtdb.firebaseio.com",
+      projectId: "ob-pick-list",
+      storageBucket: "ob-pick-list.firebasestorage.app",
+      messagingSenderId: "134326354077",
+      appId: "1:134326354077:web:b59ca97dd2ec668cc65474",
+      measurementId: "G-908NN9GK3D"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const analytics = getAnalytics(app);
+    const db = getDatabase(app);
+
     // Master user credentials fixed
     const MASTER_USER_ID = "129730";
     const MASTER_PASSWORD = "Nur@0504";
@@ -235,7 +210,7 @@
     let loggedInUserId = null;
     let isMasterUser = false;
 
-    // Login elements
+    // DOM elements
     const loginScreen = document.getElementById("loginScreen");
     const appScreen = document.getElementById("appScreen");
     const pickerIdInput = document.getElementById("pickerId");
@@ -243,7 +218,6 @@
     const loginBtn = document.getElementById("loginBtn");
     const loginError = document.getElementById("loginError");
 
-    // App elements
     const cartonInput = document.getElementById("cartonInput");
     const markPickedBtn = document.getElementById("markPickedBtn");
     const skipBtn = document.getElementById("skipBtn");
@@ -253,7 +227,6 @@
     const locationScanInput = document.getElementById("locationScanInput");
     const locationScanStatus = document.getElementById("locationScanStatus");
 
-    // Display elements
     const levelNumberEl = document.getElementById("levelNumber");
     const locationIdEl = document.getElementById("locationId");
     const cartonIdEl = document.getElementById("cartonId");
@@ -273,7 +246,6 @@
     const masterControls = document.getElementById("masterControls");
     const openUserMgmtBtn = document.getElementById("openUserMgmtBtn");
 
-    // User management modal elements
     const userMgmtModal = document.getElementById("userMgmtModal");
     const closeUserMgmtBtn = document.getElementById("closeUserMgmtBtn");
     const userTableBody = document.getElementById("userTableBody");
@@ -302,6 +274,7 @@
         isMasterUser = user.isMaster;
         loginError.classList.add("hidden");
         showAppScreen();
+        setupFirebaseListener();
       } else {
         loginError.classList.remove("hidden");
       }
