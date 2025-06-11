@@ -2,38 +2,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>Carton Picker with Firebase Live Update</title>
+  <title>Carton Picker with Fixed Login</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <!-- Firebase SDKs -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
-    import { getAnalytics } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-analytics.js";
-    import { getDatabase, ref, onValue, set, update } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
-
-    const firebaseConfig = {
-      apiKey: "AIzaSyC7bdFbIo4KPxrkPW9gpn7LbTrx9fI4WaQ",
-      authDomain: "ob-pick-list.firebaseapp.com",
-      databaseURL: "https://ob-pick-list-default-rtdb.firebaseio.com",
-      projectId: "ob-pick-list",
-      storageBucket: "ob-pick-list.firebasestorage.app",
-      messagingSenderId: "134326354077",
-      appId: "1:134326354077:web:b59ca97dd2ec668cc65474",
-      measurementId: "G-908NN9GK3D"
-    };
-
-    // Initialize Firebase
-    const app = initializeApp(firebaseConfig);
-    const analytics = getAnalytics(app);
-    const db = getDatabase(app);
-
-    // Expose Firebase database and functions globally
-    window.firebaseDB = db;
-    window.firebaseRef = ref;
-    window.firebaseOnValue = onValue;
-    window.firebaseSet = set;
-    window.firebaseUpdate = update;
-  </script>
   <style>
     input[type="text"], input[type="password"] {
       -webkit-appearance: none;
@@ -156,28 +127,7 @@
       </table>
     </div>
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
-    import { getAnalytics } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-analytics.js";
-    import { getDatabase, ref, onValue, set, update } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
-
-    // Firebase config
-    const firebaseConfig = {
-      apiKey: "AIzaSyC7bdFbIo4KPxrkPW9gpn7LbTrq9fI4WaQ",
-      authDomain: "ob-pick-list.firebaseapp.com",
-      databaseURL: "https://ob-pick-list-default-rtdb.firebaseio.com",
-      projectId: "ob-pick-list",
-      storageBucket: "ob-pick-list.firebasestorage.app",
-      messagingSenderId: "134326354077",
-      appId: "1:134326354077:web:b59ca97dd2ec668cc65474",
-      measurementId: "G-908NN9GK3D"
-    };
-
-    // Initialize Firebase
-    const app = initializeApp(firebaseConfig);
-    const analytics = getAnalytics(app);
-    const db = getDatabase(app);
-
+  <script>
     // Master user credentials fixed
     const MASTER_USER_ID = "129730";
     const MASTER_PASSWORD = "Nur@0504";
@@ -246,16 +196,6 @@
     const masterControls = document.getElementById("masterControls");
     const openUserMgmtBtn = document.getElementById("openUserMgmtBtn");
 
-    const userMgmtModal = document.getElementById("userMgmtModal");
-    const closeUserMgmtBtn = document.getElementById("closeUserMgmtBtn");
-    const userTableBody = document.getElementById("userTableBody");
-    const userForm = document.getElementById("userForm");
-    const userIdInput = document.getElementById("userIdInput");
-    const userPasswordInput = document.getElementById("userPasswordInput");
-    const userIsMasterInput = document.getElementById("userIsMasterInput");
-    const userFormCancelBtn = document.getElementById("userFormCancelBtn");
-    const editUserIndexInput = document.getElementById("editUserIndex");
-
     // Enable login button only if both fields have values
     function updateLoginButtonState() {
       loginBtn.disabled = !(pickerIdInput.value.trim() && passwordInput.value.trim());
@@ -274,7 +214,6 @@
         isMasterUser = user.isMaster;
         loginError.classList.add("hidden");
         showAppScreen();
-        setupFirebaseListener();
       } else {
         loginError.classList.remove("hidden");
       }
