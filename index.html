@@ -2,16 +2,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>Carton Picker with Firebase Realtime Database Sync</title>
+  <title>Carton Picker with Full Firebase Realtime Database Sync</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <!-- Firebase SDKs -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
     import { getAnalytics } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-analytics.js";
-    import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
+    import { getDatabase, ref, onValue, set, update } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
-    // Your web app's Firebase configuration
+    // Your Firebase config
     const firebaseConfig = {
       apiKey: "AIzaSyC7bdFbIo4KPxrkPW9gpn7LbTrq9fI4WaQ",
       authDomain: "ob-pick-list.firebaseapp.com",
@@ -28,11 +28,12 @@
     const analytics = getAnalytics(app);
     const db = getDatabase(app);
 
-    // Expose Firebase database and functions globally
+    // Expose Firebase globally
     window.firebaseDB = db;
     window.firebaseRef = ref;
     window.firebaseOnValue = onValue;
     window.firebaseSet = set;
+    window.firebaseUpdate = update;
   </script>
   <style>
     input[type="file"] {
@@ -159,28 +160,7 @@
       </table>
     </div>
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
-    import { getAnalytics } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-analytics.js";
-    import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
-
-    // Your web app's Firebase configuration
-    const firebaseConfig = {
-      apiKey: "AIzaSyC7bdFbIo4KPxrkPW9gpn7LbTrq9fI4WaQ",
-      authDomain: "ob-pick-list.firebaseapp.com",
-      databaseURL: "https://ob-pick-list-default-rtdb.firebaseio.com",
-      projectId: "ob-pick-list",
-      storageBucket: "ob-pick-list.firebasestorage.app",
-      messagingSenderId: "134326354077",
-      appId: "1:134326354077:web:b59ca97dd2ec668cc65474",
-      measurementId: "G-908NN9GK3D"
-    };
-
-    // Initialize Firebase
-    const app = initializeApp(firebaseConfig);
-    const analytics = getAnalytics(app);
-    const db = getDatabase(app);
-
+  <script>
     // Master user credentials fixed
     const MASTER_USER_ID = "129730";
     const MASTER_PASSWORD = "Nur@0504";
@@ -267,7 +247,6 @@
         isMasterUser = user.isMaster;
         loginError.classList.add("hidden");
         showAppScreen();
-        setupFirebaseListener();
       } else {
         loginError.classList.remove("hidden");
       }
@@ -333,36 +312,6 @@
         const locNumB = parseInt(b.LOCATION_ID.slice(-3), 10) || 0;
         return locNumA - locNumB;
       });
-    }
-
-    // Setup Firebase listener for live data updates
-    function setupFirebaseListener() {
-      const dataRef = ref(db, 'cartonData');
-      onValue(dataRef, (snapshot) => {
-        const val = snapshot.val();
-        if (val) {
-          data = Object.values(val);
-          data = sortDataForPicking(data);
-          renderTable();
-          showGuidedPicking();
-        } else {
-          data = [];
-          renderTable();
-          showGuidedPicking();
-        }
-      });
-    }
-
-    // Save data to Firebase
-    function saveDataToFirebase() {
-      const dataRef = ref(db, 'cartonData');
-      const dataObj = {};
-      data.forEach(item => {
-        if (item.CARTON) {
-          dataObj[item.CARTON] = item;
-        }
-      });
-      set(dataRef, dataObj);
     }
 
     // Render table rows filtered by user (all if master)
@@ -513,6 +462,7 @@
       data[mainIndex].PickerID = loggedInUserId;
       pickStatusEl.textContent = "Picked";
       renderTable();
+      saveDataToFirebase();
       guidedIndex++;
       showGuidedPicking();
     });
@@ -529,100 +479,24 @@
       data[mainIndex].PickerID = loggedInUserId;
       pickStatusEl.textContent = "Skipped";
       renderTable();
+      saveDataToFirebase();
       guidedIndex++;
       showGuidedPicking();
     });
 
-    // Handle Excel upload (all users)
-    const uploadExcel = document.getElementById("uploadExcel");
-    uploadExcel.addEventListener("change", (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = (evt) => {
-        const bstr = evt.target.result;
-        const wb = XLSX.read(bstr, { type: "binary" });
-        const firstSheetName = wb.SheetNames[0];
-        const ws = wb.Sheets[firstSheetName];
-        const jsonData = XLSX.utils.sheet_to_json(ws, { defval: "" });
-
-        // Assign uploaded data to current user (except master sees all)
-        const newData = jsonData.map(row => ({
-          STORE: row.STORE || row.store || "",
-          STORE_NAME: row.STORE_NAME || row.store_name || "",
-          ROUTE: row.ROUTE || row.route || "",
-          CARTON: row.CARTON || row.carton || "",
-          LOCATION_ID: row.LOCATION_ID || row.location_id || "",
-          PACK_DATE: row.PACK_DATE || row.pack_date || "",
-          TOTAL_QTY: row.TOTAL_QTY || row.total_qty || "",
-          ASN_NBR: row.ASN_NBR || row.asn_nbr || "",
-          Total_Ctn: row["Total Ctn"] || row.total_ctn || row.total_ctn || "",
-          AWB: row["AWB#"] || row.awb || "",
-          Brand_Code: row["Brand Code"] || row.brand_code || "",
-          Picked: false,
-          Skipped: false,
-          PickerID: isMasterUser ? "" : loggedInUserId
-        }));
-
-        if (isMasterUser) {
-          // Master user replaces all data
-          data = newData;
-        } else {
-          // Normal user appends their data
-          // Remove old data for this user first
-          data = data.filter(d => d.PickerID !== loggedInUserId);
-          data = data.concat(newData);
+    // Save data to Firebase Realtime Database
+    function saveDataToFirebase() {
+      const dataRef = window.firebaseRef(window.firebaseDB, 'cartonData');
+      const dataObj = {};
+      data.forEach(item => {
+        if (item.CARTON) {
+          dataObj[item.CARTON] = item;
         }
-
-        data = sortDataForPicking(data);
-
-        guidedIndex = 0;
-        locationScanned = false;
-        renderTable();
-        showGuidedPicking();
-        alert("Excel data uploaded successfully. Start picking the first carton.");
-      };
-      reader.readAsBinaryString(file);
-      e.target.value = null;
-    });
-
-    // Handle Excel export (all users)
-    const exportExcelBtn = document.getElementById("exportExcelBtn");
-    exportExcelBtn.addEventListener("click", () => {
-      if (data.length === 0) {
-        alert("No data to export.");
-        return;
-      }
-      let exportData = [];
-      if (isMasterUser) {
-        exportData = data;
-      } else {
-        exportData = data.filter(d => d.PickerID === loggedInUserId);
-      }
-      const exportFormatted = exportData.map(item => ({
-        STORE: item.STORE,
-        STORE_NAME: item.STORE_NAME,
-        ROUTE: item.ROUTE,
-        CARTON: item.CARTON,
-        LOCATION_ID: item.LOCATION_ID,
-        "Level Number": extractLevelNumber(item.LOCATION_ID),
-        PACK_DATE: item.PACK_DATE,
-        TOTAL_QTY: item.TOTAL_QTY,
-        ASN_NBR: item.ASN_NBR,
-        "Total Ctn": item.Total_Ctn,
-        "AWB#": item.AWB,
-        "Brand Code": item.Brand_Code,
-        Status: item.Picked ? "Picked" : (item.Skipped ? "Skipped" : "Pending"),
-        "Picker ID": item.PickerID || ""
-      }));
-
-      const ws = XLSX.utils.json_to_sheet(exportFormatted);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "CartonData");
-      XLSX.writeFile(wb, "carton_data_export.xlsx");
-    });
-
+      });
+      window.firebaseSet(dataRef, dataObj).catch(err => {
+        alert("Error saving data to Firebase: " + err.message);
+      });
+    }
   </script>
 </body>
 </html>
