@@ -1,0 +1,632 @@
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Carton Picker with Firebase Integration</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <!-- Firebase SDKs -->
+  <script type="module">
+    // Import the functions you need from the SDKs you need
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-analytics.js";
+    import { getDatabase, ref, set, get, child, update } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
+
+    // Your web app's Firebase configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyC7bdFbIo4KPxrkPW9gpn7LbTrx9fI4WaQ",
+      authDomain: "ob-pick-list.firebaseapp.com",
+      projectId: "ob-pick-list",
+      storageBucket: "ob-pick-list.firebasestorage.app",
+      messagingSenderId: "134326354077",
+      appId: "1:134326354077:web:b59ca97dd2ec668cc65474",
+      measurementId: "G-908NN9GK3D"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const analytics = getAnalytics(app);
+    const db = getDatabase(app);
+
+    // Expose Firebase database and functions globally for use in main script
+    window.firebaseDB = db;
+    window.firebaseRef = ref;
+    window.firebaseGet = get;
+    window.firebaseChild = child;
+    window.firebaseSet = set;
+    window.firebaseUpdate = update;
+  </script>
+  <style>
+    input[type="text"], input[type="password"] {
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      appearance: none;
+    }
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+  </style>
+</head>
+<body class="bg-white min-h-screen flex flex-col p-4 font-sans">
+
+  <!-- Login Screen -->
+  <div id="loginScreen" class="max-w-md w-full mx-auto flex flex-col space-y-4 h-full justify-center">
+    <h1 class="text-3xl font-bold text-center mb-6">Carton Picker Login</h1>
+    <div class="bg-gray-100 p-6 rounded shadow flex flex-col space-y-4">
+      <label for="pickerId" class="font-semibold text-gray-700">Picker ID</label>
+      <input id="pickerId" type="text" placeholder="Enter Picker ID" class="border border-gray-400 rounded px-3 py-3 text-lg focus:outline-none focus:ring-2 focus:ring-blue-500" autocomplete="off" />
+      <label for="password" class="font-semibold text-gray-700">Password</label>
+      <input id="password" type="password" placeholder="Enter Password" class="border border-gray-400 rounded px-3 py-3 text-lg focus:outline-none focus:ring-2 focus:ring-blue-500" autocomplete="off" />
+      <button id="loginBtn" class="bg-blue-600 text-white py-3 rounded disabled:opacity-50 disabled:cursor-not-allowed text-lg" disabled>Login</button>
+      <p id="loginError" class="text-red-600 font-semibold hidden text-center">Invalid Picker ID or Password.</p>
+    </div>
+  </div>
+
+  <!-- Main App Screen -->
+  <div id="appScreen" class="max-w-4xl w-full mx-auto flex flex-col space-y-4 hidden">
+    <div class="flex flex-col sm:flex-row justify-between items-center">
+      <h1 class="text-2xl font-bold mb-2 sm:mb-0">Carton Picker</h1>
+      <button id="openUserMgmtBtn" class="bg-gray-700 text-white px-4 py-2 rounded hover:bg-gray-800 hidden sm:inline-block">User Management</button>
+    </div>
+
+    <!-- Upload & Export Buttons (All users) -->
+    <div id="masterControls" class="flex flex-col sm:flex-row justify-between items-center space-y-2 sm:space-y-0 sm:space-x-2">
+      <label for="uploadExcel" class="cursor-pointer bg-green-600 text-white px-4 py-3 rounded text-center hover:bg-green-700 flex-1 sm:flex-none">
+        Upload Excel
+        <input id="uploadExcel" type="file" accept=".xlsx,.xls" class="hidden" />
+      </label>
+      <button id="exportExcelBtn" class="bg-blue-600 text-white px-4 py-3 rounded hover:bg-blue-700 flex-1 sm:flex-none">Export Excel</button>
+    </div>
+
+    <!-- Guided Picking Info -->
+    <div id="guidedPicking" class="bg-yellow-100 border border-yellow-400 p-4 rounded shadow text-center text-gray-800 font-semibold text-base sm:text-lg">
+      Please upload data to start picking.
+    </div>
+
+    <!-- Scan Location input section -->
+    <div class="bg-gray-100 p-4 rounded shadow flex flex-col space-y-3">
+      <label for="locationScanInput" class="font-semibold text-gray-700 text-base sm:text-lg">Scan or Enter Location ID</label>
+      <input id="locationScanInput" type="text" placeholder="Scan Location ID here" class="border border-gray-400 rounded px-3 py-3 text-lg focus:outline-none focus:ring-2 focus:ring-green-500" autocomplete="off" disabled />
+      <p id="locationScanStatus" class="text-sm text-red-600 font-semibold mt-1 hidden">Please scan the correct location ID first.</p>
+    </div>
+
+    <!-- Scan Carton input section -->
+    <div class="bg-gray-100 p-4 rounded shadow flex flex-col space-y-3">
+      <label for="cartonInput" class="font-semibold text-gray-700 text-base sm:text-lg">Scan or Enter Carton ID</label>
+      <input id="cartonInput" type="text" placeholder="Scan Carton ID here" class="border border-gray-400 rounded px-3 py-3 text-lg focus:outline-none focus:ring-2 focus:ring-blue-500" autocomplete="off" disabled />
+      <div class="flex space-x-2">
+        <button id="markPickedBtn" class="bg-blue-600 text-white py-3 rounded flex-1 disabled:opacity-50 disabled:cursor-not-allowed text-lg" disabled>Mark as Picked</button>
+        <button id="skipBtn" class="bg-red-600 text-white py-3 rounded flex-1 text-lg">Skip</button>
+      </div>
+    </div>
+
+    <!-- Display Location, Level and Carton info -->
+    <div id="locationCartonInfo" class="bg-gray-200 p-4 rounded shadow hidden">
+      <div class="flex flex-col sm:flex-row justify-between mb-2 space-y-2 sm:space-y-0 sm:space-x-4 text-sm sm:text-base">
+        <div>
+          <p class="font-semibold text-gray-700">Level Number</p>
+          <p id="levelNumber" class="font-bold text-gray-900"></p>
+        </div>
+        <div>
+          <p class="font-semibold text-gray-700">Location ID</p>
+          <p id="locationId" class="font-bold text-gray-900"></p>
+        </div>
+        <div>
+          <p class="font-semibold text-gray-700">Carton ID</p>
+          <p id="cartonId" class="font-bold text-gray-900"></p>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs sm:text-sm text-gray-700">
+        <div><span class="font-semibold">Store:</span> <span id="store"></span></div>
+        <div><span class="font-semibold">Store Name:</span> <span id="storeName"></span></div>
+        <div><span class="font-semibold">Route:</span> <span id="route"></span></div>
+        <div><span class="font-semibold">Pack Date:</span> <span id="packDate"></span></div>
+        <div><span class="font-semibold">Total Qty:</span> <span id="totalQty"></span></div>
+        <div><span class="font-semibold">ASN Nbr:</span> <span id="asnNbr"></span></div>
+        <div><span class="font-semibold">Total Ctn:</span> <span id="totalCtn"></span></div>
+        <div><span class="font-semibold">AWB#:</span> <span id="awb"></span></div>
+        <div><span class="font-semibold">Brand Code:</span> <span id="brandCode"></span></div>
+        <div><span class="font-semibold">Status:</span> <span id="pickStatus" class="font-bold"></span></div>
+        <div><span class="font-semibold">Picker ID:</span> <span id="pickerIdDisplay" class="font-bold"></span></div>
+      </div>
+    </div>
+
+    <!-- Data Table -->
+    <div class="overflow-x-auto max-w-full mt-4">
+      <table class="table-auto border-collapse border border-gray-400 w-full text-xs sm:text-sm">
+        <thead>
+          <tr class="bg-gray-600 text-white text-xs sm:text-sm">
+            <th class="border border-gray-400 px-2 py-1">STORE</th>
+            <th class="border border-gray-400 px-2 py-1">STORE_NAME</th>
+            <th class="border border-gray-400 px-2 py-1">ROUTE</th>
+            <th class="border border-gray-400 px-2 py-1">CARTON</th>
+            <th class="border border-gray-400 px-2 py-1">LOCATION_ID</th>
+            <th class="border border-gray-400 px-2 py-1">Level Number</th>
+            <th class="border border-gray-400 px-2 py-1">PACK_DATE</th>
+            <th class="border border-gray-400 px-2 py-1">TOTAL_QTY</th>
+            <th class="border border-gray-400 px-2 py-1">ASN_NBR</th>
+            <th class="border border-gray-400 px-2 py-1">Total Ctn</th>
+            <th class="border border-gray-400 px-2 py-1">AWB#</th>
+            <th class="border border-gray-400 px-2 py-1">Brand Code</th>
+            <th class="border border-gray-400 px-2 py-1">Status</th>
+            <th class="border border-gray-400 px-2 py-0.5">Picker ID</th>
+          </tr>
+        </thead>
+        <tbody id="dataTableBody" class="text-gray-900"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- User Management Modal -->
+  <div id="userMgmtModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50 p-4">
+    <div class="bg-white rounded shadow-lg max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-lg font-bold">User Management</h2>
+        <button id="closeUserMgmtBtn" class="text-gray-600 hover:text-gray-900 text-3xl font-bold leading-none">&times;</button>
+      </div>
+      <form id="userForm" class="space-y-4">
+        <input type="hidden" id="editUserIndex" />
+        <div>
+          <label for="userIdInput" class="block font-semibold mb-1">User ID</label>
+          <input id="userIdInput" type="text" class="w-full border border-gray-400 rounded px-3 py-2" required />
+        </div>
+        <div>
+          <label for="userPasswordInput" class="block font-semibold mb-1">Password</label>
+          <input id="userPasswordInput" type="password" class="w-full border border-gray-400 rounded px-3 py-2" required />
+        </div>
+        <div>
+          <label class="inline-flex items-center">
+            <input id="userIsMasterInput" type="checkbox" class="form-checkbox" disabled />
+            <span class="ml-2">Master User (fixed)</span>
+          </label>
+        </div>
+        <div class="flex space-x-2">
+          <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">Save</button>
+          <button type="button" id="userFormCancelBtn" class="bg-gray-400 text-black px-4 py-2 rounded hover:bg-gray-500">Cancel</button>
+        </div>
+      </form>
+      <hr class="my-4" />
+      <h3 class="font-bold mb-2">Users</h3>
+      <table class="w-full text-sm border border-gray-300 rounded">
+        <thead>
+          <tr class="bg-gray-200">
+            <th class="border border-gray-300 px-2 py-1 text-left">User ID</th>
+            <th class="border border-gray-300 px-2 py-1 text-left">Master</th>
+            <th class="border border-gray-300 px-2 py-1 text-left">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="userTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    // Master user credentials fixed
+    const MASTER_USER_ID = "129730";
+    const MASTER_PASSWORD = "Nur@0504";
+
+    // Predefined users with common password 123456
+    let users = [
+      { userId: MASTER_USER_ID, password: MASTER_PASSWORD, isMaster: true },
+      { userId: "111343", password: "123456", isMaster: false },
+      { userId: "173165", password: "123456", isMaster: false },
+      { userId: "164273", password: "123456", isMaster: false },
+      { userId: "166464", password: "123456", isMaster: false },
+      { userId: "166466", password: "123456", isMaster: false },
+      { userId: "111367", password: "123456", isMaster: false },
+      { userId: "124496", password: "123456", isMaster: false },
+      { userId: "166469", password: "123456", isMaster: false },
+      { userId: "131682", password: "123456", isMaster: false },
+      { userId: "111352", password: "123456", isMaster: false },
+      { userId: "138963", password: "123456", isMaster: false },
+      { userId: "111329", password: "123456", isMaster: false },
+      { userId: "166468", password: "123456", isMaster: false },
+      { userId: "166470", password: "123456", isMaster: false },
+      { userId: "165877", password: "123456", isMaster: false },
+      { userId: "165874", password: "123456", isMaster: false }
+    ];
+
+    // Data and state
+    let data = [];
+    let guidedIndex = 0;
+    let locationScanned = false;
+    let loggedInUserId = null;
+    let isMasterUser = false;
+
+    // Login elements
+    const loginScreen = document.getElementById("loginScreen");
+    const appScreen = document.getElementById("appScreen");
+    const pickerIdInput = document.getElementById("pickerId");
+    const passwordInput = document.getElementById("password");
+    const loginBtn = document.getElementById("loginBtn");
+    const loginError = document.getElementById("loginError");
+
+    // App elements
+    const cartonInput = document.getElementById("cartonInput");
+    const markPickedBtn = document.getElementById("markPickedBtn");
+    const skipBtn = document.getElementById("skipBtn");
+    const locationCartonInfo = document.getElementById("locationCartonInfo");
+    const guidedPicking = document.getElementById("guidedPicking");
+
+    const locationScanInput = document.getElementById("locationScanInput");
+    const locationScanStatus = document.getElementById("locationScanStatus");
+
+    // Display elements
+    const levelNumberEl = document.getElementById("levelNumber");
+    const locationIdEl = document.getElementById("locationId");
+    const cartonIdEl = document.getElementById("cartonId");
+    const storeEl = document.getElementById("store");
+    const storeNameEl = document.getElementById("storeName");
+    const routeEl = document.getElementById("route");
+    const packDateEl = document.getElementById("packDate");
+    const totalQtyEl = document.getElementById("totalQty");
+    const asnNbrEl = document.getElementById("asnNbr");
+    const totalCtnEl = document.getElementById("totalCtn");
+    const awbEl = document.getElementById("awb");
+    const brandCodeEl = document.getElementById("brandCode");
+    const pickStatusEl = document.getElementById("pickStatus");
+    const pickerIdDisplay = document.getElementById("pickerIdDisplay");
+
+    const dataTableBody = document.getElementById("dataTableBody");
+    const masterControls = document.getElementById("masterControls");
+    const openUserMgmtBtn = document.getElementById("openUserMgmtBtn");
+
+    // User management modal elements
+    const userMgmtModal = document.getElementById("userMgmtModal");
+    const closeUserMgmtBtn = document.getElementById("closeUserMgmtBtn");
+    const userTableBody = document.getElementById("userTableBody");
+    const userForm = document.getElementById("userForm");
+    const userIdInput = document.getElementById("userIdInput");
+    const userPasswordInput = document.getElementById("userPasswordInput");
+    const userIsMasterInput = document.getElementById("userIsMasterInput");
+    const userFormCancelBtn = document.getElementById("userFormCancelBtn");
+    const editUserIndexInput = document.getElementById("editUserIndex");
+
+    // Enable login button only if both fields have values
+    function updateLoginButtonState() {
+      loginBtn.disabled = !(pickerIdInput.value.trim() && passwordInput.value.trim());
+    }
+    pickerIdInput.addEventListener("input", updateLoginButtonState);
+    passwordInput.addEventListener("input", updateLoginButtonState);
+
+    // Login handler
+    loginBtn.addEventListener("click", () => {
+      const enteredId = pickerIdInput.value.trim();
+      const enteredPass = passwordInput.value.trim();
+
+      const user = users.find(u => u.userId === enteredId && u.password === enteredPass);
+      if (user) {
+        loggedInUserId = user.userId;
+        isMasterUser = user.isMaster;
+        loginError.classList.add("hidden");
+        showAppScreen();
+      } else {
+        loginError.classList.remove("hidden");
+      }
+    });
+
+    function showAppScreen() {
+      loginScreen.classList.add("hidden");
+      appScreen.classList.remove("hidden");
+      pickerIdDisplay.textContent = loggedInUserId;
+      masterControls.style.display = "flex"; // all users can upload/export
+      openUserMgmtBtn.style.display = isMasterUser ? "inline-block" : "none";
+      document.getElementById("uploadExcel").disabled = false;
+      document.getElementById("exportExcelBtn").disabled = false;
+      resetAppState();
+    }
+
+    // Reset app state for picking
+    function resetAppState() {
+      guidedIndex = 0;
+      locationScanned = false;
+      cartonInput.value = "";
+      locationScanInput.value = "";
+      locationScanStatus.classList.add("hidden");
+      renderTable();
+      showGuidedPicking();
+    }
+
+    // Extract Level Number from LOCATION_ID based on your metric:
+    function extractLevelNumber(locationId) {
+      if (!locationId) return "";
+      const match = locationId.match(/L(\d{1,2})/i);
+      if (match && match[1]) {
+        let lvl = parseInt(match[1], 10);
+        if (lvl >= 1 && lvl <= 6) return "Level " + lvl;
+      }
+      return "";
+    }
+
+    // Priority locations to show last in picking order
+    const priorityLocationsLast = [
+      "IN-TRANSIT",
+      "RDOOR01",
+      "STORE RETURN STOCK",
+      "SPACE ISSUE",
+      "STORE RETURN",
+      "STORE CLOSED"
+    ];
+
+    // Custom sort to put priorityLocationsLast at the end, others sorted by level and location number
+    function sortDataForPicking(arr) {
+      return arr.slice().sort((a, b) => {
+        const aIsPriority = priorityLocationsLast.includes(a.LOCATION_ID.toUpperCase());
+        const bIsPriority = priorityLocationsLast.includes(b.LOCATION_ID.toUpperCase());
+        if (aIsPriority && !bIsPriority) return 1;
+        if (!aIsPriority && bIsPriority) return -1;
+        if (aIsPriority && bIsPriority) return 0;
+
+        const levelA = parseInt((a.LOCATION_ID.match(/L(\d{1,2})/i) || [])[1] || 0, 10);
+        const levelB = parseInt((b.LOCATION_ID.match(/L(\d{1,2})/i) || [])[1] || 0, 10);
+        if (levelA !== levelB) return levelA - levelB;
+
+        const locNumA = parseInt(a.LOCATION_ID.slice(-3), 10) || 0;
+        const locNumB = parseInt(b.LOCATION_ID.slice(-3), 10) || 0;
+        return locNumA - locNumB;
+      });
+    }
+
+    // Render table rows filtered by user (all if master)
+    function renderTable() {
+      dataTableBody.innerHTML = "";
+      let filteredData = isMasterUser ? data : data.filter(d => d.PickerID === loggedInUserId);
+      filteredData.forEach((item) => {
+        const levelNum = extractLevelNumber(item.LOCATION_ID);
+        const tr = document.createElement("tr");
+        let statusText = "";
+        let statusClass = "";
+        if (item.Picked) {
+          statusText = "Picked";
+          statusClass = "bg-green-100";
+        } else if (item.Skipped) {
+          statusText = "Skipped";
+          statusClass = "bg-red-100";
+        }
+        tr.className = statusClass;
+        tr.innerHTML = `
+          <td class="border border-gray-400 px-1 py-0.5">${item.STORE || ""}</td>
+          <td class="border border-gray-400 px-1 py-0.5">${item.STORE_NAME || ""}</td>
+          <td class="border border-gray-400 px-1 py-0.5">${item.ROUTE || ""}</td>
+          <td class="border border-gray-400 px-1 py-0.5">${item.CARTON || ""}</td>
+          <td class="border border-gray-400 px-1 py-0.5">${item.LOCATION_ID || ""}</td>
+          <td class="border border-gray-400 px-1 py-0.5">${levelNum}</td>
+          <td class="border border-gray-400 px-1 py-0.5">${item.PACK_DATE || ""}</td>
+          <td class="border border-gray-400 px-1 py-0.5">${item.TOTAL_QTY || ""}</td>
+          <td class="border border-gray-400 px-1 py-0.5">${item.ASN_NBR || ""}</td>
+          <td class="border border-gray-400 px-1 py-0.5">${item.Total_Ctn || ""}</td>
+          <td class="border border-gray-400 px-1 py-0.5">${item.AWB || ""}</td>
+          <td class="border border-gray-400 px-1 py-0.5">${item.Brand_Code || ""}</td>
+          <td class="border border-gray-400 px-1 py-0.5 text-center font-semibold">${statusText}</td>
+          <td class="border border-gray-400 px-1 py-0.5 text-center font-semibold">${item.PickerID || ""}</td>
+        `;
+        dataTableBody.appendChild(tr);
+      });
+    }
+
+    // Show current guided picking carton info filtered by user
+    function showGuidedPicking() {
+      if (data.length === 0) {
+        guidedPicking.textContent = "Please upload data to start picking.";
+        locationScanInput.disabled = true;
+        cartonInput.disabled = true;
+        markPickedBtn.disabled = true;
+        skipBtn.disabled = true;
+        locationCartonInfo.classList.add("hidden");
+        return;
+      }
+      let filteredData = isMasterUser ? data : data.filter(d => d.PickerID === loggedInUserId || (!d.PickerID && !d.Picked && !d.Skipped));
+      while (guidedIndex < filteredData.length && (filteredData[guidedIndex].Picked || filteredData[guidedIndex].Skipped)) {
+        guidedIndex++;
+      }
+      if (guidedIndex >= filteredData.length) {
+        guidedPicking.textContent = "All cartons have been picked or skipped.";
+        locationScanInput.disabled = true;
+        cartonInput.disabled = true;
+        markPickedBtn.disabled = true;
+        skipBtn.disabled = true;
+        locationCartonInfo.classList.add("hidden");
+        return;
+      }
+      const item = filteredData[guidedIndex];
+      guidedPicking.textContent = `Next pick: Location ${item.LOCATION_ID} (Level ${extractLevelNumber(item.LOCATION_ID).replace("Level ", "")}), Carton ${item.CARTON}`;
+      locationScanInput.disabled = false;
+      locationScanInput.value = "";
+      locationScanStatus.classList.add("hidden");
+      locationScanned = false;
+
+      cartonInput.disabled = true;
+      cartonInput.value = "";
+      markPickedBtn.disabled = true;
+      skipBtn.disabled = false; // skip enabled always
+
+      // Show details with status pending
+      levelNumberEl.textContent = extractLevelNumber(item.LOCATION_ID);
+      locationIdEl.textContent = item.LOCATION_ID;
+      cartonIdEl.textContent = item.CARTON;
+      storeEl.textContent = item.STORE;
+      storeNameEl.textContent = item.STORE_NAME;
+      routeEl.textContent = item.ROUTE;
+      packDateEl.textContent = item.PACK_DATE;
+      totalQtyEl.textContent = item.TOTAL_QTY;
+      asnNbrEl.textContent = item.ASN_NBR;
+      totalCtnEl.textContent = item.Total_Ctn;
+      awbEl.textContent = item.AWB;
+      brandCodeEl.textContent = item.Brand_Code;
+      pickStatusEl.textContent = "Pending";
+      pickerIdDisplay.textContent = loggedInUserId;
+      locationCartonInfo.classList.remove("hidden");
+    }
+
+    // Validate location scan input matches current guided location
+    function validateLocationInput() {
+      if (data.length === 0) return false;
+      let filteredData = isMasterUser ? data : data.filter(d => d.PickerID === loggedInUserId || (!d.PickerID && !d.Picked && !d.Skipped));
+      if (guidedIndex >= filteredData.length) return false;
+      const expectedLocation = filteredData[guidedIndex].LOCATION_ID.toLowerCase();
+      const inputVal = locationScanInput.value.trim().toLowerCase();
+      return inputVal === expectedLocation;
+    }
+
+    locationScanInput.addEventListener("input", () => {
+      if (validateLocationInput()) {
+        locationScanStatus.classList.add("hidden");
+        locationScanned = true;
+        cartonInput.disabled = false;
+        cartonInput.focus();
+      } else {
+        locationScanStatus.classList.remove("hidden");
+        locationScanned = false;
+        cartonInput.disabled = true;
+        cartonInput.value = "";
+        markPickedBtn.disabled = true;
+      }
+    });
+
+    // Validate carton input matches current guided carton and location scanned
+    function validateCartonInput() {
+      if (data.length === 0 || !locationScanned) {
+        markPickedBtn.disabled = true;
+        return;
+      }
+      let filteredData = isMasterUser ? data : data.filter(d => d.PickerID === loggedInUserId || (!d.PickerID && !d.Picked && !d.Skipped));
+      if (guidedIndex >= filteredData.length) {
+        markPickedBtn.disabled = true;
+        return;
+      }
+      const expectedCarton = filteredData[guidedIndex].CARTON.toLowerCase();
+      const inputVal = cartonInput.value.trim().toLowerCase();
+      markPickedBtn.disabled = inputVal !== expectedCarton;
+    }
+
+    cartonInput.addEventListener("input", () => {
+      validateCartonInput();
+    });
+
+    markPickedBtn.addEventListener("click", () => {
+      if (data.length === 0 || !locationScanned) return;
+      let filteredData = isMasterUser ? data : data.filter(d => d.PickerID === loggedInUserId || (!d.PickerID && !d.Picked && !d.Skipped));
+      if (guidedIndex >= filteredData.length) return;
+      const item = filteredData[guidedIndex];
+      const mainIndex = data.findIndex(d => d.CARTON === item.CARTON && d.LOCATION_ID === item.LOCATION_ID);
+      if (mainIndex === -1) return;
+      data[mainIndex].Picked = true;
+      data[mainIndex].Skipped = false;
+      data[mainIndex].PickerID = loggedInUserId;
+      pickStatusEl.textContent = "Picked";
+      renderTable();
+      guidedIndex++;
+      showGuidedPicking();
+    });
+
+    skipBtn.addEventListener("click", () => {
+      if (data.length === 0) return;
+      let filteredData = isMasterUser ? data : data.filter(d => d.PickerID === loggedInUserId || (!d.PickerID && !d.Picked && !d.Skipped));
+      if (guidedIndex >= filteredData.length) return;
+      const item = filteredData[guidedIndex];
+      const mainIndex = data.findIndex(d => d.CARTON === item.CARTON && d.LOCATION_ID === item.LOCATION_ID);
+      if (mainIndex === -1) return;
+      data[mainIndex].Skipped = true;
+      data[mainIndex].Picked = false;
+      data[mainIndex].PickerID = loggedInUserId;
+      pickStatusEl.textContent = "Skipped";
+      renderTable();
+      guidedIndex++;
+      showGuidedPicking();
+    });
+
+    // Handle Excel upload (all users)
+    const uploadExcel = document.getElementById("uploadExcel");
+    uploadExcel.addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        const bstr = evt.target.result;
+        const wb = XLSX.read(bstr, { type: "binary" });
+        const firstSheetName = wb.SheetNames[0];
+        const ws = wb.Sheets[firstSheetName];
+        const jsonData = XLSX.utils.sheet_to_json(ws, { defval: "" });
+
+        // Assign uploaded data to current user (except master sees all)
+        const newData = jsonData.map(row => ({
+          STORE: row.STORE || row.store || "",
+          STORE_NAME: row.STORE_NAME || row.store_name || "",
+          ROUTE: row.ROUTE || row.route || "",
+          CARTON: row.CARTON || row.carton || "",
+          LOCATION_ID: row.LOCATION_ID || row.location_id || "",
+          PACK_DATE: row.PACK_DATE || row.pack_date || "",
+          TOTAL_QTY: row.TOTAL_QTY || row.total_qty || "",
+          ASN_NBR: row.ASN_NBR || row.asn_nbr || "",
+          Total_Ctn: row["Total Ctn"] || row.total_ctn || row.total_ctn || "",
+          AWB: row["AWB#"] || row.awb || "",
+          Brand_Code: row["Brand Code"] || row.brand_code || "",
+          Picked: false,
+          Skipped: false,
+          PickerID: isMasterUser ? "" : loggedInUserId
+        }));
+
+        if (isMasterUser) {
+          // Master user replaces all data
+          data = newData;
+        } else {
+          // Normal user appends their data
+          // Remove old data for this user first
+          data = data.filter(d => d.PickerID !== loggedInUserId);
+          data = data.concat(newData);
+        }
+
+        data = sortDataForPicking(data);
+
+        guidedIndex = 0;
+        locationScanned = false;
+        renderTable();
+        showGuidedPicking();
+        alert("Excel data uploaded successfully. Start picking the first carton.");
+      };
+      reader.readAsBinaryString(file);
+      e.target.value = null;
+    });
+
+    // Handle Excel export (all users)
+    const exportExcelBtn = document.getElementById("exportExcelBtn");
+    exportExcelBtn.addEventListener("click", () => {
+      if (data.length === 0) {
+        alert("No data to export.");
+        return;
+      }
+      let exportData = [];
+      if (isMasterUser) {
+        exportData = data;
+      } else {
+        exportData = data.filter(d => d.PickerID === loggedInUserId);
+      }
+      const exportFormatted = exportData.map(item => ({
+        STORE: item.STORE,
+        STORE_NAME: item.STORE_NAME,
+        ROUTE: item.ROUTE,
+        CARTON: item.CARTON,
+        LOCATION_ID: item.LOCATION_ID,
+        "Level Number": extractLevelNumber(item.LOCATION_ID),
+        PACK_DATE: item.PACK_DATE,
+        TOTAL_QTY: item.TOTAL_QTY,
+        ASN_NBR: item.ASN_NBR,
+        "Total Ctn": item.Total_Ctn,
+        "AWB#": item.AWB,
+        "Brand Code": item.Brand_Code,
+        Status: item.Picked ? "Picked" : (item.Skipped ? "Skipped" : "Pending"),
+        "Picker ID": item.PickerID || ""
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(exportFormatted);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "CartonData");
+      XLSX.writeFile(wb, "carton_data_export.xlsx");
+    });
+
+  </script>
+</body>
+</html>
